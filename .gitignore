@@ -1,0 +1,9 @@
+node_modules
+.env
+npm-debug.log*
+*.log
+
+# Internal deploy tooling and server config (server IP, paths, nginx). Kept
+# locally, never committed to this public repo.
+.infra/
+DEPLOY.md

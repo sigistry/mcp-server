@@ -1,0 +1,13 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.sigistry/plugin-catalog",
+  "title": "Sigistry: Verified Plugins, Skills & MCP Scorecards",
+  "description": "Verified Claude Code plugins and skills, plus A-F security scorecards for MCP servers.",
+  "version": "1.5.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://sigistry.com/mcp"
+    }
+  ]
+}
