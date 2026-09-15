@@ -2,7 +2,7 @@
 
 [Official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=sigistry)
 
-[![Sigistry: Verified Plugins, Skills & MCP Scorecards MCP connector – tool definition quality and endpoint health on Glama](https://glama.ai/mcp/connectors/com.sigistry/plugin-catalog/badges/score.svg)](https://glama.ai/mcp/connectors/com.sigistry/plugin-catalog)
+[![Sigistry scorecard: grade A](https://sigistry.com/badge/mcp/sigistry-catalog.svg)](https://sigistry.com/mcp-scorecards) [![Sigistry: Verified Plugins, Skills & MCP Scorecards MCP connector – tool definition quality and endpoint health on Glama](https://glama.ai/mcp/connectors/com.sigistry/plugin-catalog/badges/score.svg)](https://glama.ai/mcp/connectors/com.sigistry/plugin-catalog)
 
 A small, self-contained Node.js service that exposes the [Sigistry](https://sigistry.com) trust layer for Claude Code to AI agents through a public, read-only, authless **remote MCP server** using the Streamable HTTP transport: security-checked plugins and portable skills, independent A-to-F security scorecards for third-party MCP servers, and a local plugin-verification recipe.
 
