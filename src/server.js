@@ -101,7 +101,7 @@ const skillHitSchema = z.object({
 });
 
 export function buildServer() {
-  const server = new McpServer({ name: 'sigistry', version: '1.6.0' });
+  const server = new McpServer({ name: 'sigistry', version: '1.7.0' });
 
   server.registerTool(
     'search_plugins',
@@ -413,6 +413,84 @@ export function buildServer() {
           'Exit code 0 means all applicable checks passed (verification-ready). Each FAIL line names the file and the exact problem; n/a means the plugin has no such component (e.g. no hooks). The same script, run by registry CI, gates the Verified badge on submission.',
         nextSteps:
           'When verification-ready: submit via PR to github.com/Sigistry/marketplace (see CONTRIBUTING.md). Vendor under plugins/<name>/ for the Verified tier, or keep the repo external and add a commit pin for Verified-at-commit. Details: https://sigistry.com/verification',
+      };
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      };
+    }
+  );
+
+  // check_mcp_app mirrors verify_plugin: it does NO server-side work and
+  // receives no app code. It returns the Sigistry MCP App safety criteria so
+  // the calling agent can apply them to the ui:// resource it already has in
+  // context, or hand them to the user. The same checks run interactively, in
+  // the browser, at https://sigistry.com/mcp-app-checker.
+  server.registerTool(
+    'check_mcp_app',
+    {
+      title: 'Check an MCP App for safety and spec conformance (runs locally)',
+      description:
+        'Get the Sigistry MCP App safety criteria to audit an MCP App (MCP Apps / SEP-1865: a tool that returns an interactive ui:// HTML resource the host renders in a sandboxed iframe) BEFORE shipping it. Returns two groups of checks: spec conformance (ui:// scheme, the text/html;profile=mcp-app mimeType, tool-to-UI linkage via _meta.ui.resourceUri, a text fallback, visibility values, and CSP coverage of external origins) and security hygiene the iframe sandbox does not cover (unsafe DOM sinks, embedded secrets, host-message origin handling, remote scripts). Call this when the user is building or reviewing an MCP App; then apply each check to the app source you have in context and report findings. Nothing is sent to this server; an interactive browser version is at https://sigistry.com/mcp-app-checker.',
+      inputSchema: {},
+      outputSchema: {
+        runsWhere: z.string().describe('always "local": the agent applies the criteria in context; no app code reaches this server'),
+        rubricVersion: z.string(),
+        hubUrl: z.string().describe('human-readable MCP Apps hub'),
+        checkerUrl: z.string().describe('interactive in-browser checker'),
+        specUrl: z.string().describe('the MCP Apps (SEP-1865) specification'),
+        checks: z
+          .array(
+            z.object({
+              id: z.string(),
+              title: z.string(),
+              group: z.string().describe('"spec-conformance" or "security-hygiene"'),
+              what: z.string().describe('the requirement'),
+              howToCheck: z.string().describe('what to inspect in the app source'),
+            })
+          )
+          .describe('the checks to apply to the MCP App'),
+        steps: z.array(z.string()).describe('what the agent should do, in order'),
+        interpreting: z.string(),
+        nextSteps: z.string(),
+      },
+      annotations: {
+        title: 'Check an MCP App for safety',
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async () => {
+      const result = {
+        runsWhere: 'local',
+        rubricVersion: '1.0',
+        hubUrl: 'https://sigistry.com/mcp-apps',
+        checkerUrl: 'https://sigistry.com/mcp-app-checker',
+        specUrl: 'https://github.com/modelcontextprotocol/ext-apps',
+        checks: [
+          { id: 'ui-scheme', title: 'UI resource scheme', group: 'spec-conformance', what: 'The UI resource is declared under the ui:// scheme.', howToCheck: 'Find the resource declaration; confirm its uri starts with "ui://". Hosts only treat ui:// resources as app surfaces.' },
+          { id: 'mime-type', title: 'Resource mimeType', group: 'spec-conformance', what: 'The resource mimeType is exactly "text/html;profile=mcp-app".', howToCheck: 'Check the resource mimeType. Plain "text/html" renders as a document, not an app; the pre-release "text/html+mcp" spelling is now wrong.' },
+          { id: 'tool-linkage', title: 'Tool to UI linkage', group: 'spec-conformance', what: 'A UI-backed tool links its interface via _meta.ui.resourceUri to a resource the server actually exposes.', howToCheck: 'In the tool definition, confirm _meta.ui.resourceUri is present and resolves to a declared ui:// resource.' },
+          { id: 'text-fallback', title: 'Text fallback', group: 'spec-conformance', what: 'UI-enabled tools also return a text/structured content array.', howToCheck: 'Confirm the tool still returns a meaningful content array so hosts without the apps extension degrade gracefully.' },
+          { id: 'visibility', title: 'Visibility values', group: 'spec-conformance', what: 'If _meta.ui.visibility is declared, it uses only "model" and "app".', howToCheck: 'Check any visibility array for values other than "model"/"app" (defaults to both when omitted).' },
+          { id: 'csp', title: 'Content Security Policy', group: 'spec-conformance', what: 'Every external origin the UI uses is declared in _meta.ui.csp, with no wildcard connect origin.', howToCheck: 'List every absolute URL the HTML loads or fetches; confirm each origin appears in _meta.ui.csp (connect/resource/frame domains). Flag any "*" in connectDomains. Hosts build the enforced CSP only from declared domains.' },
+          { id: 'dangerous-sinks', title: 'Unsafe DOM sinks', group: 'security-hygiene', what: 'Tool output and host messages are never written to the DOM through injection sinks.', howToCheck: 'Search the UI JS for eval(, new Function(, .innerHTML =, .outerHTML =, document.write(, insertAdjacentHTML(, dangerouslySetInnerHTML. Any of these on host/tool data is a stored-XSS path inside the iframe; use textContent or escaped bindings.' },
+          { id: 'secrets', title: 'No embedded secrets', group: 'security-hygiene', what: 'The shipped UI HTML contains no API keys, tokens, or credentials.', howToCheck: 'Scan the HTML for key/token patterns and inline credential assignments. The resource ships to every client and is visible in the host; keep keys server-side behind a tool call.' },
+          { id: 'postmessage', title: 'Host message hygiene', group: 'security-hygiene', what: 'Host messages are validated, not blindly trusted.', howToCheck: 'If the app calls postMessage with a "*" target origin, or adds a "message" listener with no origin/source check, flag it. Prefer @modelcontextprotocol/sdk, which handles the JSON-RPC channel.' },
+          { id: 'remote-scripts', title: 'Self-contained bundle', group: 'security-hygiene', what: 'The app ships its own code rather than loading remote scripts.', howToCheck: 'Flag any <script src="https://..."> tag. Remote scripts must be CSP-declared and can change after review; bundling inline keeps the app auditable at a pinned version.' },
+        ],
+        steps: [
+          'Gather the app source: the ui:// resource HTML and the tool/resource metadata (the object with _meta.ui).',
+          'Apply each check above to that source and record pass / warn / fail with the exact line or field for every finding.',
+          'Fix the failures (unsafe sinks, embedded secrets, undeclared origins, wrong mimeType) and re-check.',
+          'Optionally point the user to the interactive checker to confirm, or to the hub for the full picture.',
+        ],
+        interpreting:
+          'Spec-conformance failures mean the host may not render the app at all (wrong mimeType or scheme) or will block requests at runtime (undeclared CSP origins). Security-hygiene failures are the parts the iframe sandbox does not protect you from: a sink or secret in your own code is still exploitable inside the sandbox.',
+        nextSteps:
+          'Confirm interactively at https://sigistry.com/mcp-app-checker (paste the ui:// HTML and metadata; nothing is uploaded). Background on the extension and the security model: https://sigistry.com/mcp-apps',
       };
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
